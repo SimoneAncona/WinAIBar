@@ -2,7 +2,7 @@
   "profiles": {
     "AIBar (Package)": {
       "commandName": "MsixPackage",
-      "commandLineArgs": "-m gemma3:1b -s"
+      "commandLineArgs": "-s"
     },
     "AIBar (Unpackaged)": {
       "commandName": "Project"

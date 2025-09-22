@@ -1,22 +1,8 @@
-﻿using Microsoft.UI.Windowing;
+﻿
+using AIBar.Windows;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.ApplicationModel;
-using Windows.ApplicationModel.Activation;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
-using Windows.UI;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -25,8 +11,8 @@ namespace AIBar;
 
 public class Options
 {
-    public string Model { get; set; } = "gemma3:4b";
-    public bool SelfMode { get; set; } = false;
+    public required string Model { get; set; }
+    public bool SelfMode { get; set; }
 }
 
 /// <summary>
@@ -49,7 +35,7 @@ public partial class App : Application
     /// Invoked when the application is launched.
     /// </summary>
     /// <param name="args">Details about the launch request and process.</param>
-    protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+    protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         string[] arguments = Environment.GetCommandLineArgs();
         var options = ParseArguments(arguments);
@@ -59,7 +45,10 @@ public partial class App : Application
 
     private static Options ParseArguments(string[] args)
     {
-        var options = new Options();
+        var options = new Options()
+        { 
+            Model = Path.Combine("C:", "Users", Environment.GetEnvironmentVariable("USERNAME") ?? "Public", ".cache", "huggingface", "hub", "models--Qwen--Qwen3-1.7B-GGUF", "snapshots", "90862c4b9d2787eaed51d12237eafdfe7c5f6077", "Qwen3-1.7B-Q8_0.gguf")
+        };
         for (int i = 1; i < args.Length; i++)
         {
             switch (args[i])
