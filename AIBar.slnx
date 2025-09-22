@@ -1,0 +1,23 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="ARM" />
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="AIBar\AIBar.csproj">
+    <BuildType Solution="Debug|Any CPU" Project="Release" />
+    <Platform Solution="*|Any CPU" Project="x64" />
+    <Platform Solution="*|ARM" Project="x64" />
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x86" />
+    <Deploy />
+  </Project>
+  <Project Path="Package/AIWinBarPackage.wapproj" Type="c7167f0d-bc9f-4e6e-afe1-012c56b48db5" Id="2451dea4-d943-47ec-96af-c03dc1557e04">
+    <BuildType Solution="Debug|Any CPU" Project="Release" />
+    <Platform Solution="Debug|Any CPU" Project="x64" />
+    <Deploy />
+  </Project>
+</Solution>

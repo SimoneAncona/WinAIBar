@@ -1,0 +1,2 @@
+MainPackage=C:\Users\simon\source\repos\AIBar\Package\bin\x86\Release\AIWinBarPackage_0.1.0.0_x86.msix
+SymbolPackage=C:\Users\simon\source\repos\AIBar\Package\obj\x86\Release\Symbols\AIWinBarPackage_0.1.0.0_x86.appxsym
