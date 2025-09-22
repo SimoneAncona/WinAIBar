@@ -123,8 +123,30 @@ public static class ExecuteActions
             case "showDesktop":
                 ShowDesktop(window);
                 break;
+            case "showTime":
+                ShowTime(window);
+                break;
+            case "setTimer":
+                new TimerWindow(TimeSpan.Parse(action.Argument)).Activate();
+                break;
 
         }
+    }
+
+    private static void ShowTime(MainWindow window)
+    {
+        var time = DateTime.Now.ToString("HH:mm");
+        window.Resize(new(1200, 320));
+        window.ClearItems();
+        var responseEl = new TextBlock()
+        {
+            Text = time,
+            FontSize = 45,
+            TextAlignment = Microsoft.UI.Xaml.TextAlignment.Left,
+            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+            Margin = new(20)
+        };
+        window.AddItem(responseEl);
     }
 
     private static void ShowDesktop(MainWindow window)
@@ -178,7 +200,8 @@ public static class ExecuteActions
         {
             Text = prompt,
             FontSize = 15,
-            TextAlignment = Microsoft.UI.Xaml.TextAlignment.Right
+            TextAlignment = Microsoft.UI.Xaml.TextAlignment.Right,
+            
         };
         var responseEl = new TextBlock()
         {

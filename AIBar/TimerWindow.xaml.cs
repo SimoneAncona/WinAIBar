@@ -1,30 +1,103 @@
-﻿using Microsoft.UI;
-using Microsoft.UI.Windowing;
+﻿using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.Windows.AppNotifications;
+using Microsoft.Windows.AppNotifications.Builder;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using Windows.Graphics;
-using Windows.Media.Protection.PlayReady;
-using WinRT.Interop;
+using Windows.Foundation;
 
 namespace AIBar;
 
 public partial class TimerWindow : Window
 {
-    public TimerWindow()
+    private readonly DispatcherTimer _timer;
+    private TimeSpan _timeRemaining;
+    private readonly TimeSpan _initialTime;
+
+    public TimerWindow(TimeSpan timeout)
     {
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
-        IntPtr hwnd = WindowNative.GetWindowHandle(this);
-        var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
-        AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
-        appWindow.Resize(new SizeInt32(400, 400));
-        appWindow.IsShownInSwitchers = true;
-        var presenter = appWindow.Presenter as OverlappedPresenter;
+        AppWindow.Resize(new(400, 400));
+        var presenter = AppWindow.Presenter as OverlappedPresenter;
         presenter!.IsMaximizable = false;
-        presenter!.IsMinimizable = true;
+        presenter!.IsResizable = false;
+
+        _initialTime = timeout;
+        _timeRemaining = _initialTime;
+
+        TimerPath.Width = 400;
+        TimerPath.Height = 400;
+        TimerPath.HorizontalAlignment = HorizontalAlignment.Center;
+        TimerPath.VerticalAlignment = VerticalAlignment.Center;
+
+
+        TimerText.Text = _timeRemaining.ToString(@"mm\:ss");
+
+        _timer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _timer.Tick += Timer_Tick;
+        _timer.Start();
+    }
+
+    private async void Timer_Tick(object? sender, object e)
+    {
+        if (_timeRemaining.TotalSeconds > 0)
+        {
+            _timeRemaining = _timeRemaining.Subtract(TimeSpan.FromSeconds(1));
+            TimerText.Text = _timeRemaining.ToString(@"hh\:mm\:ss");
+            UpdateArc();
+        }
+        else
+        {
+            _timer.Stop();
+            var notification = new AppNotificationBuilder()
+                .AddText("Timer expired");
+            AppNotificationManager.Default.Show(notification.BuildNotification());
+            await Task.Delay(2000);
+            Close();
+        }
+    }
+
+    private void UpdateArc()
+    {
+        double progress = 1 - (_timeRemaining.TotalSeconds / _initialTime.TotalSeconds);
+
+        double centerX = 200;
+        double centerY = 199;
+        double radius = 70;
+
+        double angle = progress * 360;
+
+        double endX = centerX + radius * Math.Sin(Math.PI * angle / 180);
+        double endY = centerY - radius * Math.Cos(Math.PI * angle / 180);
+
+       
+        double startX = centerX;
+        double startY = centerY - radius;
+
+        bool isLargeArc = angle > 180.0;
+
+        PathGeometry pathGeometry = new();
+        PathFigure pathFigure = new()
+        {
+            StartPoint = new Point(startX, startY)
+        };
+
+        ArcSegment arcSegment = new()
+        {
+            Point = new Point(endX, endY),
+            Size = new Size(radius, radius),
+            IsLargeArc = isLargeArc,
+            SweepDirection = SweepDirection.Clockwise
+
+        };
+        pathFigure.Segments.Add(arcSegment);
+        pathGeometry.Figures.Add(pathFigure);
+
+        TimerPath.Data = pathGeometry;
     }
 }

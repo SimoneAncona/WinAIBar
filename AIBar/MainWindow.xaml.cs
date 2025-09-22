@@ -2,22 +2,19 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.Windows.AppNotifications;
-using Microsoft.Windows.AppNotifications.Builder;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Windows.Graphics;
+using Windows.UI.WindowManagement;
 using WinRT.Interop;
+using CommunityToolkit.WinUI;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -47,6 +44,11 @@ public sealed partial class MainWindow : Window, IDisposable
     private static IntPtr _hookID = IntPtr.Zero;
     private static bool altPressed = false;
     private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+
     [DllImport("user32.dll")]
     private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn,
         IntPtr hMod, uint dwThreadId);
@@ -67,18 +69,15 @@ public sealed partial class MainWindow : Window, IDisposable
         _proc = HookCallback;
         _hookID = SetHook(_proc);
         ExtendsContentIntoTitleBar = true;
-        IntPtr hwnd = WindowNative.GetWindowHandle(this);
-        var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
-        AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
-        appWindow.Resize(new SizeInt32(Width, Height));
-        appWindow.IsShownInSwitchers = true;
-        var presenter = appWindow.Presenter as OverlappedPresenter;
+        AppWindow.Resize(new SizeInt32(Width, Height));
+        AppWindow.IsShownInSwitchers = true;
+        var presenter = AppWindow.Presenter as OverlappedPresenter;
         presenter!.IsMaximizable = false;
         presenter!.IsMinimizable = false;
         presenter!.IsResizable = false;
         presenter!.SetBorderAndTitleBar(true, false);
         presenter!.IsAlwaysOnTop = true;
-        CenterToScreen(appWindow, windowId);
+        CenterToScreen();
         _client = new(
             modelName: _options.Model,
             ollamaPath: Path.Combine(Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? throw new Exception("Cannot find LOCALAPPDATA"), "Programs", "Ollama", "ollama.exe")
@@ -88,6 +87,7 @@ public sealed partial class MainWindow : Window, IDisposable
         SearchBox.PlaceholderText = Placeholder;
         Task.Run(_client.StartOllama);
         Closed += MainWindow_Closed;
+        Activated += Current_Activated;
     }
 
     #region Win32 calls
@@ -114,12 +114,12 @@ public sealed partial class MainWindow : Window, IDisposable
             }
             if (altPressed && vkCode == VK_SPACE)
             {
-                 IntPtr hwnd = WindowNative.GetWindowHandle(this);
-                var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
-                AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
-                if (s_hidden) appWindow.Show();
-                else appWindow.Hide();
-                s_hidden = !s_hidden;
+                if (s_hidden)
+                {
+                    Show();
+                    return 1;
+                }
+                Hide();
                 return 1;
             }
         }
@@ -140,8 +140,15 @@ public sealed partial class MainWindow : Window, IDisposable
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         args.Handled = true;
-        AppWindow.Hide();
-        s_hidden = true;
+        Hide();
+    }
+
+    private void Current_Activated(object sender, WindowActivatedEventArgs e)
+    {
+        if (e.WindowActivationState == WindowActivationState.Deactivated)
+        {
+            Hide();
+        }
     }
 
 
@@ -149,15 +156,16 @@ public sealed partial class MainWindow : Window, IDisposable
     {
         AppWindow.Resize(x);
     }
-    private static void CenterToScreen(AppWindow appWindow, WindowId winId)
+    private void CenterToScreen()
     {
-        if (appWindow is null) return;
-        DisplayArea displayArea = DisplayArea.GetFromWindowId(winId, DisplayAreaFallback.Nearest);
+        IntPtr hwnd = WindowNative.GetWindowHandle(this);
+        var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
+        DisplayArea displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
 
-        var CenteredPosition = appWindow.Position;
-        CenteredPosition.X = ((displayArea.WorkArea.Width - appWindow.Size.Width) / 2);
-        CenteredPosition.Y = ((displayArea.WorkArea.Height - appWindow.Size.Height) / 4);
-        appWindow.Move(CenteredPosition);
+        var CenteredPosition = AppWindow.Position;
+        CenteredPosition.X = ((displayArea.WorkArea.Width - AppWindow.Size.Width) / 2);
+        CenteredPosition.Y = ((displayArea.WorkArea.Height - AppWindow.Size.Height) / 4);
+        AppWindow.Move(CenteredPosition);
     
     }
 
@@ -171,6 +179,11 @@ public sealed partial class MainWindow : Window, IDisposable
             SearchBox.Text = null;
             SearchBox.IsReadOnly = true;
             SearchBox.PlaceholderText = "Loading...";
+            AddItem(new ProgressBar()
+            {
+                Width = 1200,
+                IsIndeterminate = true
+            });
             try
             {
                 string res;
@@ -180,14 +193,25 @@ public sealed partial class MainWindow : Window, IDisposable
                     res = (await _client.GenerateAsync(text)).Replace("```json", "").Replace("```", "");
                 Debug.WriteLine(res);
                 var actions = JsonConvert.DeserializeObject<List<ActionResult>>(res) ?? throw new Exception($"Cannot convert {res}");
+                ClearItems();
                 await ExecuteActions.ExecuteAsync(text, actions, this);
             }
             catch (Exception ex)
             {
+                ClearItems();
                 Debug.WriteLine(ex);
             }
             SearchBox.IsReadOnly = false;
             SearchBox.PlaceholderText = Placeholder;
+        }
+    }
+
+    private void SearchBox_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox textBox)
+        {
+            var border = textBox.FindDescendant<Border>();
+            border!.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -205,6 +229,13 @@ public sealed partial class MainWindow : Window, IDisposable
     {
         s_hidden = true;
         AppWindow.Hide();
+    }
+
+    public void Show()
+    {
+        s_hidden = false;
+        AppWindow.Show();
+        SetForegroundWindow(WindowNative.GetWindowHandle(this));
     }
 
     public void Dispose()

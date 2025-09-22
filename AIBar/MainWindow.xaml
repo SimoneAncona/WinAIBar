@@ -10,12 +10,13 @@
     </Window.SystemBackdrop>
     <StackPanel>
         <TextBox x:Name="SearchBox"
-              FontSize="18"
+              FontSize="17"
               BorderThickness="0"
               Background="Transparent"
               Foreground="White"
               KeyDown="SearchBox_KeyDown"
-              Padding="20"
+              Padding="19"
+              Loaded="SearchBox_Loaded"
         />
         <StackPanel x:Name="ItemsContainer">
               
