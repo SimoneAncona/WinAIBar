@@ -55,7 +55,7 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
         "setBluetooth"  | "on" or "off"
         "setVolume"     | Value from 0 to 100
         "setBrightness" | Value from 0 to 100
-        "response"      | String
+        "response"      | String (natural language response, cannot be empty)
         "takeScreenshot"| empty string
         "shutdown"      | empty string
         "restart"       | empty string
@@ -74,6 +74,7 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
         8. If the user wants to shutdown or restart the computer, use the "shutdown" or "restart" action, the "argument" can be an empty string
         9. If the user wants to minimize everything, use the "showDesktop" action, the "argument" can be an empty string
         10. If the user wants to know the time, use the "showTime" action, the "argument" can be an empty string
+        11. If the user asks you what you can do, respond with the "response" action and a short list of your capabilities
 
         Examples:
         User prompt: "Open notepad and search for cute cats online"

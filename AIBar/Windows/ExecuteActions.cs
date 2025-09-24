@@ -12,9 +12,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.UI;
 
 namespace AIBar.Windows;
 
@@ -38,12 +40,7 @@ public static class ExecuteActions
     private const uint WM_SETTINGCHANGE = 0x001A;
     private const uint SMTO_ABORTIFHUNG = 0x0002;
 
-    struct INPUT
-    {
-        public uint type;
-        public InputUnion U;
-        public static int Size => Marshal.SizeOf(typeof(INPUT));
-    }
+
 
     [StructLayout(LayoutKind.Explicit)]
     struct InputUnion
@@ -62,10 +59,6 @@ public static class ExecuteActions
     }
 
     const int WM_COMMAND = 0x0111;
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
 
@@ -77,7 +70,8 @@ public static class ExecuteActions
 
     private readonly static ListView s_chat = new()
     {
-        Margin = new(20),
+        Height = 300,
+        MaxHeight = 300
     };
 
     public static async Task ExecuteAsync(string prompt, List<ActionResult> actions, MainWindow window)
@@ -140,7 +134,25 @@ public static class ExecuteActions
             case "setTimer":
                 new TimerWindow(TimeSpan.Parse(action.Argument)).Activate();
                 break;
+            case "setBrightness":
+                SetBrightness(int.Parse(action.Argument));
+                break;
 
+        }
+    }
+
+    private static void SetBrightness(int brightness)
+    {
+        if (brightness < 0 || brightness > 100) return;
+        var mcb = new ManagementClass("WmiMonitorBrightnessMethods")
+        {
+            Scope = new ManagementScope(@"\\.\root\wmi")
+        };
+        var instances = mcb.GetInstances();
+        foreach (ManagementObject instance in instances.Cast<ManagementObject>())
+        {
+            var args = new object[] { 1, brightness };
+            instance.InvokeMethod("WmiSetBrightness", args);
         }
     }
 
@@ -178,23 +190,50 @@ public static class ExecuteActions
 
     private static void Response(string prompt, string response, MainWindow window)
     {
-        window.Resize(new(1200, 500));
+        window.Resize(new(1200, 700));
         window.ClearItems();
-        var request = new TextBlock()
+        Color accentColor = (Color)Application.Current.Resources["SystemAccentColor"];
+        accentColor.A = 128;
+        var request = new StackPanel()
+        {
+            Background = new SolidColorBrush(accentColor),
+            MaxWidth = 300,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Padding = new Thickness(10),
+            CornerRadius = new CornerRadius(5),
+            Margin = new(20)
+        };
+        request.Children.Add(new TextBlock()
         {
             Text = prompt,
             FontSize = 15,
             TextAlignment = TextAlignment.Right,
+            TextWrapping = TextWrapping.Wrap,
 
+        });
+        var responseEl = new StackPanel()
+        {
+            Background = new SolidColorBrush(Color.FromArgb(128, 20, 20, 20)),
+            MaxWidth = 300,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(10),
+            CornerRadius = new CornerRadius(5),
+            Margin = new(20)
         };
-        var responseEl = new TextBlock()
+        responseEl.Children.Add(new TextBlock()
         {
             Text = response,
             FontSize = 15,
-            TextAlignment = TextAlignment.Left
-        };
+            TextAlignment = TextAlignment.Left,
+            TextWrapping = TextWrapping.Wrap,
+        });
         s_chat.Items.Add(request);
         s_chat.Items.Add(responseEl);
+        s_chat.Loaded += (sender, _) =>
+        {
+            if (sender is not ListView lv) return;
+            lv.ScrollIntoView(lv.Items[^1]);
+        };
         window.AddItem(s_chat);
     }
 

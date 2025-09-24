@@ -197,6 +197,7 @@ public sealed partial class MainWindow : Window, IDisposable
             SearchBox.Text = null;
             SearchBox.IsReadOnly = true;
             SearchBox.PlaceholderText = "Loading...";
+            ClearItems();
             AddItem(new ProgressBar()
             {
                 Width = 1200,
@@ -215,7 +216,6 @@ public sealed partial class MainWindow : Window, IDisposable
                 }
                 Debug.WriteLine(res);
                 var actions = JsonConvert.DeserializeObject<List<ActionResult>>(res) ?? throw new Exception($"Cannot convert {res}");
-                ClearItems();
                 Interrupt = false;
                 await ExecuteActions.ExecuteAsync(text, actions, this);
             }
