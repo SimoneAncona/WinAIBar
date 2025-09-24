@@ -1,3 +1,5 @@
+using AIBar.Utils;
+using CommunityToolkit.WinUI;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -7,15 +9,11 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 using Windows.Graphics;
+using Windows.System;
 using Windows.UI.WindowManagement;
 using WinRT.Interop;
-using CommunityToolkit.WinUI;
-using Windows.System;
-using AIBar.Utils;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -27,6 +25,10 @@ namespace AIBar.Windows;
 /// </summary>
 public sealed partial class MainWindow : Window, IDisposable
 {
+    public static bool Interrupt { get; set; }
+    private DispatcherTimer _timer = new();
+    private int _ticksPassed = 0;
+
     private readonly SLMClient _client;
     private readonly Options _options;
     private static bool s_hidden = false;
@@ -45,7 +47,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private static IntPtr _hookID = IntPtr.Zero;
     private static bool altPressed = false;
     private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-    
+
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
@@ -88,6 +90,15 @@ public sealed partial class MainWindow : Window, IDisposable
         SearchBox.PlaceholderText = Placeholder;
         Closed += MainWindow_Closed;
         Activated += Current_Activated;
+        _timer.Interval = TimeSpan.FromSeconds(10);
+        _timer.Tick += (s, e) =>
+        {
+            _ticksPassed++;
+            if (_ticksPassed >= 3)
+            {
+                _client.StopOllama();
+            }
+        };
     }
 
     #region Win32 calls
@@ -166,13 +177,14 @@ public sealed partial class MainWindow : Window, IDisposable
         CenteredPosition.X = ((displayArea.WorkArea.Width - AppWindow.Size.Width) / 2);
         CenteredPosition.Y = ((displayArea.WorkArea.Height - AppWindow.Size.Height) / 4);
         AppWindow.Move(CenteredPosition);
-    
+
     }
 
     private async void SearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key == VirtualKey.Enter)
         {
+            Interrupt = true;
             Resize(new(Width, Height));
             var text = SearchBox.Text;
             Debug.WriteLine($"Prompt: {text}");
@@ -194,6 +206,7 @@ public sealed partial class MainWindow : Window, IDisposable
                 Debug.WriteLine(res);
                 var actions = JsonConvert.DeserializeObject<List<ActionResult>>(res) ?? throw new Exception($"Cannot convert {res}");
                 ClearItems();
+                Interrupt = false;
                 await ExecuteActions.ExecuteAsync(text, actions, this);
             }
             catch (Exception ex)
@@ -228,13 +241,18 @@ public sealed partial class MainWindow : Window, IDisposable
     public void Hide()
     {
         s_hidden = true;
+        _timer.Start();
+        _ticksPassed = 0;
         AppWindow.Hide();
     }
 
     public void Show()
     {
         s_hidden = false;
+        if (!_client.IsRunning)
+            _client.StartOllama();
         AppWindow.Show();
+        _timer.Stop();
         SetForegroundWindow(WindowNative.GetWindowHandle(this));
     }
 

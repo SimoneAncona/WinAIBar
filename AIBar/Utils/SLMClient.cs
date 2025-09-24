@@ -1,9 +1,7 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,6 +13,7 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
 {
     private readonly HttpClient _httpClient = new() { BaseAddress = new Uri("http://localhost:8080/") };
     private Process? _ollamaProcess;
+    public bool IsRunning => _ollamaProcess is not null && !_ollamaProcess.HasExited;
 
     private const string SystemPrompt = """
         You are a virtual assistant for Windows 10 or later. Your job is to process user commands in natural language and respond **only** in JSON format array, never in plain text. Do not add explanations or comments.
@@ -102,6 +101,12 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
     {
         if (_ollamaProcess is not null && !_ollamaProcess.HasExited)
             return;
+        Process[] processes = Process.GetProcessesByName("llama-server");
+        if (processes.Length > 0)
+        {
+            _ollamaProcess = processes[0];
+            return;
+        }
         _ollamaProcess = new()
         {
             StartInfo = new()

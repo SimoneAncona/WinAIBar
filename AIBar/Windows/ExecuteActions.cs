@@ -1,15 +1,22 @@
-﻿using Microsoft.UI.Xaml.Controls;
+﻿using CommunityToolkit.WinUI;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.Win32;
 using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.AppNotifications.Builder;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AIBar.Windows;
+
+internal record FileSystemElement(string Path, string Type);
 
 
 public class ActionResult
@@ -93,7 +100,7 @@ public static class ExecuteActions
         switch (action.Action)
         {
             case "setTheme":
-                SetTheme(action.Argument == "dark"); 
+                SetTheme(action.Argument == "dark");
                 break;
             case "open":
                 StartProcess(action.Argument);
@@ -105,7 +112,7 @@ public static class ExecuteActions
                 KillProcess(action.Argument);
                 break;
             case "searchFile":
-                SearchFilesInUsers(action.Argument);
+                await SearchFilesInUsers(action.Argument, window);
                 break;
             case "response":
                 Response(prompt, action.Argument, window);
@@ -142,7 +149,7 @@ public static class ExecuteActions
         {
             Text = time,
             FontSize = 45,
-            TextAlignment = Microsoft.UI.Xaml.TextAlignment.Left,
+            TextAlignment = TextAlignment.Left,
             FontWeight = Microsoft.UI.Text.FontWeights.Bold,
             Margin = new(20)
         };
@@ -200,55 +207,132 @@ public static class ExecuteActions
         {
             Text = prompt,
             FontSize = 15,
-            TextAlignment = Microsoft.UI.Xaml.TextAlignment.Right,
-            
+            TextAlignment = TextAlignment.Right,
+
         };
         var responseEl = new TextBlock()
         {
             Text = response,
             FontSize = 15,
-            TextAlignment = Microsoft.UI.Xaml.TextAlignment.Left
+            TextAlignment = TextAlignment.Left
         };
         s_chat.Items.Add(request);
         s_chat.Items.Add(responseEl);
         window.AddItem(s_chat);
     }
 
-    private static void SearchFilesInUsers(string namePart)
+    private static void Search(string root, string keyword, ConcurrentBag<FileSystemElement> results, CancellationToken token)
     {
-        var result = new List<string>();
-        var stack = new Stack<string>();
-
-        stack.Push(@"C:\Users");
-
-        while (stack.Count > 0)
+        try
         {
-            var currentDir = stack.Pop();
 
-            try
+            foreach (var file in Directory.EnumerateFiles(root))
             {
-                foreach (var file in Directory.EnumerateFiles(currentDir))
-                {
-                    if (Path.GetFileName(file).Contains(namePart, StringComparison.OrdinalIgnoreCase))
-                        result.Add(file);
-                }
+                token.ThrowIfCancellationRequested();
 
-                foreach (var dir in Directory.EnumerateDirectories(currentDir))
-                    stack.Push(dir);
+                if (file.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    results.Add(new FileSystemElement(file, "file"));
             }
-            catch (UnauthorizedAccessException)
+
+            foreach (var dir in Directory.EnumerateDirectories(root))
             {
+                token.ThrowIfCancellationRequested();
+
+                if (dir.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    results.Add(new FileSystemElement(dir, "dir"));
+
+                Search(dir, keyword, results, token);
             }
-            catch (PathTooLongException)
-            {
-            }
+
+
         }
-
-        foreach (var file in result)
-        {
-            Process.Start("explorer.exe", $"/select,\"{file}\"");
-        }
+        catch { }
     }
+
+    private static async Task SearchFilesInUsers(string namePart, MainWindow window)
+    {
+        List<string> userDirs =
+        [
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
+        ];
+
+        window.AppWindow.Resize(new(1200, 800));
+        window.ClearItems();
+
+        var listView = new ListView
+        {
+            Margin = new(19),
+            Height = 400,
+            MaxHeight = 400,
+        };
+
+        await window.DispatcherQueue.EnqueueAsync(() => window.AddItem(listView));
+
+        var results = new ConcurrentBag<FileSystemElement>();
+        var cts = new CancellationTokenSource();
+
+        var searchTask = Task.Run(async () =>
+        {
+            List<Task> tasks = [];
+            foreach (var dir in userDirs)
+            {
+                tasks.Add(Task.Run(() => Search(dir, namePart, results, cts.Token)));
+            }
+            await Task.WhenAll(tasks);
+        }, cts.Token);
+
+        var uiUpdateTask = Task.Run(async () =>
+        {
+            var shown = new HashSet<FileSystemElement>();
+
+            while (!searchTask.IsCompleted)
+            {
+                if (results.Count >= 300 || MainWindow.Interrupt) cts.Cancel();
+                var toShow = results.Except(shown).OrderByDescending(r => r.Type).ThenBy(r => r.Path).ToList();
+                if (toShow.Count > 0)
+                {
+                    shown.UnionWith(toShow);
+                    await window.DispatcherQueue.EnqueueAsync(() =>
+                    {
+                        foreach (var el in toShow)
+                        {
+                            var stackPanel = new StackPanel
+                            {
+                                Orientation = Orientation.Horizontal,
+                                Spacing = 10,
+                            };
+                            stackPanel.Children.Add(new FontIcon
+                            {
+                                Glyph = el.Type == "dir" ? "\uE8B7" : "\uE7C3",
+                                FontSize = 20,
+                                VerticalAlignment = VerticalAlignment.Center,
+                            });
+                            stackPanel.Children.Add(new TextBlock
+                            {
+                                Text = el.Path,
+                                FontSize = 15,
+                                TextAlignment = TextAlignment.Left,
+                                TextTrimming = TextTrimming.CharacterEllipsis,
+                            });
+                            var b = new Button
+                            {
+                                Content = stackPanel
+                            };
+                            b.Click += (_, _) => StartProcess("explorer.exe /select, \"" + el.Path + "\"");
+                            listView.Items.Add(new ListViewItem { Content = b });
+                        }
+                    });
+                }
+            }
+        });
+
+    }
+
 
     private static void KillProcess(string name)
     {
@@ -286,7 +370,7 @@ public static class ExecuteActions
                 .BuildNotification();
 
             AppNotificationManager.Default.Show(toast);
-        } 
+        }
         catch (Exception ex)
         {
             var toast = new AppNotificationBuilder()
