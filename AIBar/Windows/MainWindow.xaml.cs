@@ -32,6 +32,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private readonly SLMClient _client;
     private readonly Options _options;
     private static bool s_hidden = false;
+    private static bool s_is_loading = false;
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int VK_SPACE = 0x20;
     private const int VK_LMENU = 0xA4;
@@ -94,7 +95,7 @@ public sealed partial class MainWindow : Window, IDisposable
         _timer.Tick += (s, e) =>
         {
             _ticksPassed++;
-            if (_ticksPassed >= 3)
+            if (_ticksPassed >= 3 && !s_is_loading)
             {
                 _client.StopOllama();
             }
@@ -162,11 +163,16 @@ public sealed partial class MainWindow : Window, IDisposable
         }
     }
 
-
     public void Resize(SizeInt32 x)
     {
         AppWindow.Resize(x);
     }
+
+    public void Resize()
+    {
+        AppWindow.Resize(new(Width, Height));
+    }
+
     private void CenterToScreen()
     {
         IntPtr hwnd = WindowNative.GetWindowHandle(this);
@@ -182,11 +188,11 @@ public sealed partial class MainWindow : Window, IDisposable
 
     private async void SearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        var text = SearchBox.Text;
         if (e.Key == VirtualKey.Enter)
         {
             Interrupt = true;
             Resize(new(Width, Height));
-            var text = SearchBox.Text;
             Debug.WriteLine($"Prompt: {text}");
             SearchBox.Text = null;
             SearchBox.IsReadOnly = true;
@@ -202,7 +208,11 @@ public sealed partial class MainWindow : Window, IDisposable
                 if (_options.SelfMode && text.StartsWith('>'))
                     res = text.TrimStart('>');
                 else
+                {
+                    s_is_loading = true;
                     res = (await _client.GenerateAsync(text)).Replace("```json", "").Replace("```", "");
+                    s_is_loading = false;
+                }
                 Debug.WriteLine(res);
                 var actions = JsonConvert.DeserializeObject<List<ActionResult>>(res) ?? throw new Exception($"Cannot convert {res}");
                 ClearItems();
@@ -216,7 +226,10 @@ public sealed partial class MainWindow : Window, IDisposable
             }
             SearchBox.IsReadOnly = false;
             SearchBox.PlaceholderText = Placeholder;
+            s_is_loading = false;
+            return;
         }
+        await ExecuteActions.ExecuteAsync(string.Empty, [new() { Action = "getDir", Argument = text }], this);
     }
 
     private void SearchBox_Loaded(object sender, RoutedEventArgs e)

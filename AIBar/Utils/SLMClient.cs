@@ -59,6 +59,8 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
         "takeScreenshot"| empty string
         "shutdown"      | empty string
         "restart"       | empty string
+        "look"          | empty string
+        "sleep"         | empty string
         "showDesktop"   | empty string
         "showTime"      | empty string
 

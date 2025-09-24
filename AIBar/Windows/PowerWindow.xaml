@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="AIBar.Windows.PowerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Power Actions">
+  <Window.SystemBackdrop>
+    <DesktopAcrylicBackdrop/>
+  </Window.SystemBackdrop>
+  
+    <Grid
+      HorizontalAlignment="Center"
+      VerticalAlignment="Center"
+      RowSpacing="10"
+      ColumnSpacing="10"
+      >
+        <Grid.RowDefinitions>
+            <RowDefinition/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+            <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+
+      <Button Grid.Row="0" Grid.Column="0" Width="45" Height="45" BorderThickness="0" Background="Transparent" Click="Shutdown_Click">
+        <FontIcon Glyph="&#xE7E8;" />
+      </Button>
+      <Button Grid.Row="0" Grid.Column="1" Width="45" Height="45" BorderThickness="0" Background="Transparent" Click="Restart_Click">
+        <FontIcon Glyph="&#xE777;" />
+      </Button>
+      <Button Grid.Row="1" Grid.Column="0" Width="45" Height="45" BorderThickness="0" Background="Transparent" Click="Sleep_Click">
+        <FontIcon Glyph="&#xE708;" />
+      </Button>
+      <Button Grid.Row="1" Grid.Column="1" Width="45" Height="45" BorderThickness="0" Background="Transparent" Click="Look_Click">
+        <FontIcon Glyph="&#xE72E;" />
+      </Button>
+    </Grid>
+</Window>

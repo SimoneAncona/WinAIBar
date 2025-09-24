@@ -1,6 +1,8 @@
 ﻿using CommunityToolkit.WinUI;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.Win32;
 using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.AppNotifications.Builder;
@@ -24,6 +26,7 @@ public class ActionResult
     public string Action { get; set; } = string.Empty;
     public string Argument { get; set; } = string.Empty;
 }
+
 public static class ExecuteActions
 {
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -58,10 +61,6 @@ public static class ExecuteActions
         public IntPtr dwExtraInfo;
     }
 
-    const uint INPUT_KEYBOARD = 1;
-    const uint KEYEVENTF_KEYUP = 0x0002;
-    const ushort VK_MENU = 0x12;
-    const ushort VK_F4 = 0x73;
     const int WM_COMMAND = 0x0111;
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -114,6 +113,9 @@ public static class ExecuteActions
             case "searchFile":
                 await SearchFilesInUsers(action.Argument, window);
                 break;
+            case "getDir":
+                await GetDir(action.Argument, window);
+                break;
             case "response":
                 Response(prompt, action.Argument, window);
                 break;
@@ -125,7 +127,9 @@ public static class ExecuteActions
                 break;
             case "shutdown":
             case "restart":
-                await ShutdownDialog(window);
+            case "look":
+            case "sleep":
+                new PowerWindow().Activate();
                 break;
             case "showDesktop":
                 ShowDesktop(window);
@@ -164,33 +168,6 @@ public static class ExecuteActions
         window.Hide();
     }
 
-    private static async Task ShutdownDialog(MainWindow window)
-    {
-        var desktop = FindWindow("Shell_TrayWnd", null);
-        SendMessage(desktop, WM_COMMAND, 419, null);
-        SetForegroundWindow(desktop);
-        window.Hide();
-        await Task.Delay(1000);
-        INPUT[] inputs = new INPUT[4];
-
-        inputs[0].type = INPUT_KEYBOARD;
-        inputs[0].U.ki.wVk = VK_MENU;
-        inputs[0].U.ki.dwFlags = 0;
-
-        inputs[1].type = INPUT_KEYBOARD;
-        inputs[1].U.ki.wVk = VK_F4;
-        inputs[1].U.ki.dwFlags = 0;
-
-        inputs[2].type = INPUT_KEYBOARD;
-        inputs[2].U.ki.wVk = VK_F4;
-        inputs[2].U.ki.dwFlags = KEYEVENTF_KEYUP;
-
-        inputs[3].type = INPUT_KEYBOARD;
-        inputs[3].U.ki.wVk = VK_MENU;
-        inputs[3].U.ki.dwFlags = KEYEVENTF_KEYUP;
-
-        SendInput((uint)inputs.Length, inputs, INPUT.Size);
-    }
 
     private static void SetWifi(bool on)
     {
@@ -201,7 +178,7 @@ public static class ExecuteActions
 
     private static void Response(string prompt, string response, MainWindow window)
     {
-        window.AppWindow.Resize(new(1200, 500));
+        window.Resize(new(1200, 500));
         window.ClearItems();
         var request = new TextBlock()
         {
@@ -221,32 +198,155 @@ public static class ExecuteActions
         window.AddItem(s_chat);
     }
 
-    private static void Search(string root, string keyword, ConcurrentBag<FileSystemElement> results, CancellationToken token)
+    private static int LevenshteinDistance(string s, string t)
+    {
+        int n = s.Length;
+        int m = t.Length;
+        int[,] d = new int[n + 1, m + 1];
+
+        for (int i = 0; i <= n; i++) d[i, 0] = i;
+        for (int j = 0; j <= m; j++) d[0, j] = j;
+
+        for (int i = 1; i <= n; i++)
+        {
+            for (int j = 1; j <= m; j++)
+            {
+                int cost = (s[i - 1] == t[j - 1]) ? 0 : 1;
+
+                d[i, j] = Math.Min(
+                    Math.Min(d[i - 1, j] + 1,
+                             d[i, j - 1] + 1),
+                             d[i - 1, j - 1] + cost);
+            }
+        }
+
+        return d[n, m];
+    }
+
+    private static bool AreStringsSimilar(string s1, string s2, double threshold = 0.5)
+    {
+        s1 = s1.ToLower();
+        s2 = s2.ToLower();
+
+        int distance = LevenshteinDistance(s1, s2);
+        int maxLen = Math.Max(s1.Length, s2.Length);
+
+        double similarity = 1.0 - (double)distance / maxLen;
+
+        return similarity >= threshold;
+    }
+
+    private static void Search(string root, string keyword, ConcurrentBag<FileSystemElement> results, CancellationToken token, bool recursive = true)
     {
         try
         {
-
             foreach (var file in Directory.EnumerateFiles(root))
             {
                 token.ThrowIfCancellationRequested();
 
-                if (file.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                if (file.Contains(keyword, StringComparison.OrdinalIgnoreCase) || AreStringsSimilar(Path.GetFileNameWithoutExtension(file), keyword))
                     results.Add(new FileSystemElement(file, "file"));
             }
 
             foreach (var dir in Directory.EnumerateDirectories(root))
             {
+                if (new DirectoryInfo(dir).Attributes.HasFlag(FileAttributes.ReparsePoint))
+                    continue;
                 token.ThrowIfCancellationRequested();
 
-                if (dir.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                if (dir.Contains(keyword, StringComparison.OrdinalIgnoreCase) || AreStringsSimilar(Path.GetDirectoryName(dir) ?? dir, keyword))
                     results.Add(new FileSystemElement(dir, "dir"));
 
-                Search(dir, keyword, results, token);
+                if (recursive)
+                    Search(dir, keyword, results, token);
             }
 
 
         }
         catch { }
+    }
+
+    private static async Task ShowFilesAsync(Task searchTask, ConcurrentBag<FileSystemElement> results, CancellationTokenSource cts, MainWindow window, ListView listView)
+    {
+        var shown = new HashSet<FileSystemElement>();
+
+        while (!searchTask.IsCompleted)
+        {
+            if (results.Count >= 300 || MainWindow.Interrupt) cts.Cancel();
+            var toShow = results.Except(shown).OrderByDescending(r => r.Type).ThenBy(r => r.Path).ToList();
+            if (toShow.Count > 0)
+            {
+                shown.UnionWith(toShow);
+                await window.DispatcherQueue.EnqueueAsync(() =>
+                {
+                    foreach (var el in toShow)
+                    {
+                        var stackPanel = new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            Spacing = 10,
+                        };
+                        stackPanel.Children.Add(new FontIcon
+                        {
+                            Glyph = el.Type == "dir" ? "\uE8B7" : "\uE7C3",
+                            FontSize = 20,
+                            VerticalAlignment = VerticalAlignment.Center,
+                        });
+                        stackPanel.Children.Add(new TextBlock
+                        {
+                            Text = el.Path,
+                            FontSize = 15,
+                            TextAlignment = TextAlignment.Left,
+                            TextTrimming = TextTrimming.CharacterEllipsis,
+                        });
+                        var b = new Button
+                        {
+                            Background = new SolidColorBrush(Colors.Transparent),
+                            Content = stackPanel,
+                            BorderThickness = new Thickness(0)
+                        };
+                        b.Click += (_, _) => StartProcess("explorer.exe /select, \"" + el.Path + "\"");
+                        listView.Items.Add(new ListViewItem { Content = b });
+                    }
+                });
+            }
+
+        }
+    }
+
+    private static async Task GetDir(string path, MainWindow window)
+    {
+        if (!Directory.Exists(path))
+        {
+            window.Resize();
+            return;
+        }
+        window.Resize(new(1200, 800));
+        window.ClearItems();
+        var listView = new ListView
+        {
+            Margin = new(15),
+            Height = 350,
+            MaxHeight = 350,
+
+        };
+
+        listView.Loaded += (listView, _) =>
+        {
+            if (listView is not ListView lv) return;
+            var scrollViewer = lv.FindDescendant<ScrollViewer>();
+            if (scrollViewer is not null)
+                scrollViewer.HorizontalScrollMode = ScrollMode.Enabled;
+        };
+
+        await window.DispatcherQueue.EnqueueAsync(() => window.AddItem(listView));
+        var results = new ConcurrentBag<FileSystemElement>();
+        var cts = new CancellationTokenSource();
+        var searchTask = Task.Run(() =>
+        {
+            Search(path, string.Empty, results, cts.Token, false);
+        }, cts.Token);
+        var _ = Task.Run(() => ShowFilesAsync(searchTask, results, cts, window, listView));
     }
 
     private static async Task SearchFilesInUsers(string namePart, MainWindow window)
@@ -266,9 +366,17 @@ public static class ExecuteActions
 
         var listView = new ListView
         {
-            Margin = new(19),
-            Height = 400,
-            MaxHeight = 400,
+            Margin = new(15),
+            Height = 350,
+            MaxHeight = 350,
+        };
+
+        listView.Loaded += (listView, _) =>
+        {
+            if (listView is not ListView lv) return;
+            var scrollViewer = lv.FindDescendant<ScrollViewer>();
+            if (scrollViewer is not null)
+                scrollViewer.HorizontalScrollMode = ScrollMode.Enabled;
         };
 
         await window.DispatcherQueue.EnqueueAsync(() => window.AddItem(listView));
@@ -286,51 +394,7 @@ public static class ExecuteActions
             await Task.WhenAll(tasks);
         }, cts.Token);
 
-        var uiUpdateTask = Task.Run(async () =>
-        {
-            var shown = new HashSet<FileSystemElement>();
-
-            while (!searchTask.IsCompleted)
-            {
-                if (results.Count >= 300 || MainWindow.Interrupt) cts.Cancel();
-                var toShow = results.Except(shown).OrderByDescending(r => r.Type).ThenBy(r => r.Path).ToList();
-                if (toShow.Count > 0)
-                {
-                    shown.UnionWith(toShow);
-                    await window.DispatcherQueue.EnqueueAsync(() =>
-                    {
-                        foreach (var el in toShow)
-                        {
-                            var stackPanel = new StackPanel
-                            {
-                                Orientation = Orientation.Horizontal,
-                                Spacing = 10,
-                            };
-                            stackPanel.Children.Add(new FontIcon
-                            {
-                                Glyph = el.Type == "dir" ? "\uE8B7" : "\uE7C3",
-                                FontSize = 20,
-                                VerticalAlignment = VerticalAlignment.Center,
-                            });
-                            stackPanel.Children.Add(new TextBlock
-                            {
-                                Text = el.Path,
-                                FontSize = 15,
-                                TextAlignment = TextAlignment.Left,
-                                TextTrimming = TextTrimming.CharacterEllipsis,
-                            });
-                            var b = new Button
-                            {
-                                Content = stackPanel
-                            };
-                            b.Click += (_, _) => StartProcess("explorer.exe /select, \"" + el.Path + "\"");
-                            listView.Items.Add(new ListViewItem { Content = b });
-                        }
-                    });
-                }
-            }
-        });
-
+        var _ = Task.Run(() => ShowFilesAsync(searchTask, results, cts, window, listView));
     }
 
 
