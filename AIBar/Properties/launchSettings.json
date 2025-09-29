@@ -1,11 +1,11 @@
 {
   "profiles": {
-    "AIBar (Package)": {
+    "AIBar (Package) Release": {
+      "commandName": "MsixPackage"
+    },
+    "AIBar (Package) Debug": {
       "commandName": "MsixPackage",
       "commandLineArgs": "-s"
-    },
-    "AIBar (Unpackaged)": {
-      "commandName": "Project"
     }
   }
 }

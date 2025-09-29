@@ -1,3 +1,4 @@
+using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -11,11 +12,14 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
+using static System.Net.Mime.MediaTypeNames;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -54,15 +58,87 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private static void ScrollToEnd(TextBox textBox)
+    {
+        var scrollViewer = textBox.FindDescendant<ScrollViewer>();
+        if (scrollViewer is null) return;
+        scrollViewer.ChangeView(null, scrollViewer.ExtentHeight, null, true);
+    }
+
+    private static string ToPrintable(string str)
+    {
+        var res = new string([.. str.Where(c => !char.IsControl(c))]);
+        string ansiPattern = @"\u001b\[[\d;]*[mK]";
+        return Regex.Replace(res, ansiPattern, string.Empty);
+    }
+
     private void InstallButton_Click(object sender, RoutedEventArgs e)
     {
-        Process.Start(new ProcessStartInfo
+        var process = Process.Start(new ProcessStartInfo
         {
             FileName = "pwsh.exe",
-            Arguments = AppDomain.CurrentDomain.BaseDirectory + "Scripts\\Install.ps1 \"" + InstallPathTextBox.Text + "\"",
+            Arguments = "-NoProfile -Command " + AppDomain.CurrentDomain.BaseDirectory + "Scripts\\Install.ps1 \"" + InstallPathTextBox.Text + "\"",
             UseShellExecute = false,
             CreateNoWindow = true,
-            Verb = "runas"
+            Verb = "runas",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         });
+        if (process is null)
+        {
+            return;
+        }
+        var stack = new StackPanel();
+        var logTextBox = new TextBox
+        {
+            Height = 350,
+            IsReadOnly = true,
+            Background = null,
+            AcceptsReturn = true,
+            FontFamily = new("Consolas"),
+            FontSize = 11,
+            BorderThickness = new(0)
+        };
+        stack.Children.Add(new TextBlock()
+        {
+            Text = "Installing...",
+            Margin = new Thickness(0, 0, 0, 10),
+            FontSize = 20,
+        });
+        stack.Children.Add(logTextBox);
+        MainGrid.Children.Clear();
+        MainGrid.Children.Add(stack);
+        process.OutputDataReceived += (sender, args) =>
+        {
+            if (!string.IsNullOrEmpty(args.Data))
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    logTextBox.Text += "(info) " + ToPrintable(args.Data) + Environment.NewLine;
+                    ScrollToEnd(logTextBox);
+                });
+            }
+        };
+        process.ErrorDataReceived += (sender, args) =>
+        {
+            if (!string.IsNullOrEmpty(args.Data))
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    logTextBox.Text += "(error) " + ToPrintable(args.Data) + Environment.NewLine;
+                    ScrollToEnd(logTextBox);
+                });
+            }
+        };
+        process.Exited += (sender, args) =>
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                logTextBox.Text += "Installation completed." + Environment.NewLine;
+            });
+        };
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
     }
 }
