@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace AIBar.Utils;
 
 
-public partial class SLMClient(string modelPath, string llama = "llama-server") : IDisposable
+public partial class SLMClient(string modelPath, string llama = "llama-server", bool extended = false) : IDisposable
 {
     private readonly HttpClient _httpClient = new() { BaseAddress = new Uri("http://localhost:8080/") };
     private Process? _ollamaProcess;
@@ -28,8 +28,7 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
                     "searchFile" | 
                     "setTimer" | 
                     "setTheme" | 
-                    "setWifi" | 
-                    "setBluetooth" | 
+                    "openSettings" |
                     "setVolume" | 
                     "setBrightness" | 
                     "close" |
@@ -38,7 +37,7 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
                     "shutdown" |
                     "restart" |
                     "showDesktop" |
-                    "showTime",
+                    "showTime", 
                 "argument": "string"
             }
         ]
@@ -51,8 +50,7 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
         "searchFile"    | the file name
         "setTimer"      | the timer in HH:MM:SS format
         "setTheme"      | "dark" or "light"
-        "setWifi"       | "on" or "off"
-        "setBluetooth"  | "on" or "off"
+        "openSettings"  | the settings page name: "network" | "bluetooth" | "display" | "sound" | "notifications" | "power" | "storage" | "apps" | "defaultApps" | "about" | "windowsUpdate"
         "setVolume"     | Value from 0 to 100
         "setBrightness" | Value from 0 to 100
         "response"      | String (natural language response, cannot be empty)
@@ -63,6 +61,7 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
         "sleep"         | empty string
         "showDesktop"   | empty string
         "showTime"      | empty string
+        "math"          | the math expression to solve, like "2+2" or "sqrt(16)"
 
         Rules:
         1. If the user wants to open something (like "open settings" or "launch calculator"), use "action": "open" and put the target in "argument".
@@ -75,7 +74,8 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
         9. If the user wants to minimize everything, use the "showDesktop" action, the "argument" can be an empty string
         10. If the user wants to know the time, use the "showTime" action, the "argument" can be an empty string
         11. If the user asks you what you can do, respond with the "response" action and a short list of your capabilities
-
+        12. If the user asks you to open a settings use the "openSettings" action and put the settings page name in "argument"
+        
         Examples:
         User prompt: "Open notepad and search for cute cats online"
         Response: [{"action": "open", "argument": "notepad"}, {"action": "searchWeb", "argument": "cute cats"}]
@@ -98,6 +98,16 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
         If you have doubts use the response action. But it's the last resort, try other actions first.
         Always respond with valid JSON that matches the format exactly. Do not include any extra text, explanations, or comments.
         
+        """;
+
+    private const string ExtendendSystemPrompt = SystemPrompt + """
+        
+        Additional Instructions for Complex Commands modes used only on powerfull PC:
+        Here is a list of additional actions you can use for more complex commands:
+        Action name     |  Arguements
+        "showBattery"   | empty string
+        "newDesktop"    | empty string
+
         """;
 
     public void StartOllama()
@@ -130,7 +140,7 @@ public partial class SLMClient(string modelPath, string llama = "llama-server") 
         {
             messages = new[]
             {
-                new { role = "system", content = SystemPrompt },
+                new { role = "system", content = extended ? ExtendendSystemPrompt : SystemPrompt },
                 new { role = "user", content = prompt },
             }
         };

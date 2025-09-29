@@ -1,4 +1,5 @@
-﻿using CommunityToolkit.WinUI;
+﻿using AIBar.Utils;
+using CommunityToolkit.WinUI;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -9,6 +10,7 @@ using Microsoft.Windows.AppNotifications.Builder;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -29,7 +31,7 @@ public class ActionResult
     public string Argument { get; set; } = string.Empty;
 }
 
-public static class ExecuteActions
+public class ExecuteActions(MainWindow window)
 {
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr SendMessageTimeout(
@@ -74,9 +76,9 @@ public static class ExecuteActions
         MaxHeight = 300
     };
 
-    public static async Task ExecuteAsync(string prompt, List<ActionResult> actions, MainWindow window)
+    public async Task ExecuteAsync(string prompt, List<ActionResult> actions)
     {
-        foreach (var action in actions) await ExecuteAsync(prompt, action, window);
+        foreach (var action in actions) await ExecuteAsync(prompt, action);
     }
 
     private static void SendNotification(string title, string? message = null)
@@ -88,7 +90,7 @@ public static class ExecuteActions
         AppNotificationManager.Default.Show(notification.BuildNotification());
     }
 
-    private static async Task ExecuteAsync(string prompt, ActionResult action, MainWindow window)
+    private async Task ExecuteAsync(string prompt, ActionResult action)
     {
         switch (action.Action)
         {
@@ -105,19 +107,19 @@ public static class ExecuteActions
                 KillProcess(action.Argument);
                 break;
             case "searchFile":
-                await SearchFilesInUsers(action.Argument, window);
+                await SearchFilesInUsers(action.Argument);
                 break;
             case "getDir":
-                await GetDir(action.Argument, window);
+                await GetDir(action.Argument);
                 break;
             case "response":
-                Response(prompt, action.Argument, window);
+                Response(prompt, action.Argument);
                 break;
             case "takeScreenshot":
                 StartProcess("ms-screenclip:");
                 break;
-            case "setWifi":
-                SetWifi(action.Argument == "on");
+            case "openSettings":
+                OpenSettings(action.Argument);
                 break;
             case "shutdown":
             case "restart":
@@ -126,10 +128,10 @@ public static class ExecuteActions
                 new PowerWindow().Activate();
                 break;
             case "showDesktop":
-                ShowDesktop(window);
+                ShowDesktop();
                 break;
             case "showTime":
-                ShowTime(window);
+                ShowTime();
                 break;
             case "setTimer":
                 new TimerWindow(TimeSpan.Parse(action.Argument)).Activate();
@@ -137,7 +139,74 @@ public static class ExecuteActions
             case "setBrightness":
                 SetBrightness(int.Parse(action.Argument));
                 break;
+            case "math":
+                ResolveMath(action.Argument);
+                break;
 
+        }
+    }
+
+    private void ResolveMath(string expression)
+    {
+        try
+        {
+            var result = new DataTable().Compute(expression, null);
+            window.Resize(new(1200, 300));
+            window.ClearItems();
+            var responseEl = new TextBlock()
+            {
+                Text = result.ToString(),
+                FontSize = 30,
+                TextAlignment = TextAlignment.Left,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                Margin = new(20)
+            };
+            window.AddItem(responseEl);
+        }
+        catch { }
+    }
+
+    private static void OpenSettings(string pageName)
+    {
+        switch (pageName)
+        {
+            case "wifi":
+            case "network":
+                StartProcess("ms-settings:network-wifi");
+                break;
+            case "bluetooth":
+                StartProcess("ms-settings:bluetooth");
+                break;
+            case "display":
+                StartProcess("ms-settings:display");
+                break;
+            case "sound":
+                StartProcess("ms-settings:sound");
+                break;
+            case "notifications":
+                StartProcess("ms-settings:notifications");
+                break;
+            case "power":
+                StartProcess("ms-settings:powersleep");
+                break;
+            case "storage":
+                StartProcess("ms-settings:storagesense");
+                break;
+            case "apps":
+                StartProcess("ms-settings:appsfeatures");
+                break;
+            case "defaultApps":
+                StartProcess("ms-settings:defaultapps");
+                break;
+            case "about":
+                StartProcess("ms-settings:about");
+                break;
+            case "windowsUpdate":
+                StartProcess("ms-settings:windowsupdate");
+                break;
+            default:
+                StartProcess("ms-settings:");
+                break;
         }
     }
 
@@ -156,7 +225,7 @@ public static class ExecuteActions
         }
     }
 
-    private static void ShowTime(MainWindow window)
+    private void ShowTime()
     {
         var time = DateTime.Now.ToString("HH:mm");
         window.Resize(new(1200, 320));
@@ -172,7 +241,7 @@ public static class ExecuteActions
         window.AddItem(responseEl);
     }
 
-    private static void ShowDesktop(MainWindow window)
+    private void ShowDesktop()
     {
         var desktop = FindWindow("Shell_TrayWnd", null);
         SendMessage(desktop, WM_COMMAND, 419, null);
@@ -180,15 +249,7 @@ public static class ExecuteActions
         window.Hide();
     }
 
-
-    private static void SetWifi(bool on)
-    {
-        SendNotification("Admin is required");
-        StartProcess($"netsh set interface Wi-Fi admin={(on ? "enable" : "disable")}", true);
-        SendNotification("WiFi", $"WiFi is now {(on ? "on" : "off")}");
-    }
-
-    private static void Response(string prompt, string response, MainWindow window)
+    private void Response(string prompt, string response)
     {
         window.Resize(new(1200, 700));
         window.ClearItems();
@@ -353,7 +414,7 @@ public static class ExecuteActions
         }
     }
 
-    private static async Task GetDir(string path, MainWindow window)
+    private async Task GetDir(string path)
     {
         if (!Directory.Exists(path))
         {
@@ -388,7 +449,7 @@ public static class ExecuteActions
         var _ = Task.Run(() => ShowFilesAsync(searchTask, results, cts, window, listView));
     }
 
-    private static async Task SearchFilesInUsers(string namePart, MainWindow window)
+    private async Task SearchFilesInUsers(string namePart)
     {
         List<string> userDirs =
         [
@@ -400,7 +461,7 @@ public static class ExecuteActions
             Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
         ];
 
-        window.AppWindow.Resize(new(1200, 800));
+        window.Resize(new(1200, 800));
         window.ClearItems();
 
         var listView = new ListView
@@ -463,9 +524,8 @@ public static class ExecuteActions
                 key.SetValue("SystemUsesLightTheme", dark ? 0 : 1, RegistryValueKind.DWord);
             }
 
-            UIntPtr result;
             SendMessageTimeout((IntPtr)HWND_BROADCAST, WM_SETTINGCHANGE, UIntPtr.Zero,
-                "ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, out result);
+                "ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, out nuint result);
 
             var toast = new AppNotificationBuilder()
                 .AddText("Theme changed")
@@ -486,10 +546,11 @@ public static class ExecuteActions
 
     private static void StartProcess(string name, bool asAdmin = false)
     {
+        var procName = GetProcessName.Processes.GetValueOrDefault(name.ToLower(), name);
         Process.Start(new ProcessStartInfo
         {
             FileName = "cmd.exe",
-            Arguments = "/C start " + name,
+            Arguments = "/C start " + procName,
             UseShellExecute = false,
             CreateNoWindow = true,
             Verb = asAdmin ? "runas" : string.Empty

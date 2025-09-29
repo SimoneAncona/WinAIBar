@@ -15,7 +15,7 @@
               BorderThickness="0"
               Background="Transparent"
               Foreground="White"
-              KeyDown="SearchBox_KeyDown"
+              KeyUp="SearchBox_KeyDown"
               Padding="19"
               Loaded="SearchBox_Loaded"
         />

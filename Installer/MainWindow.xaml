@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Installer.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Installer"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Installer">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid Padding="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Installing WinAIBar" 
+                       Style="{StaticResource TitleTextBlockStyle}" 
+                       Margin="0,0,0,5"/>
+            <TextBlock Text="Select destination folder." 
+                       Foreground="{StaticResource SystemBaseMediumColor}"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Spacing="10">
+            <TextBlock Text="Path" FontWeight="SemiBold"/>
+
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox Grid.Column="0" 
+                         Text="%LOCALAPPDATA%\Programs\WinAIBar" 
+                         x:Name="InstallPathTextBox"/>
+
+                <Button Grid.Column="1" Content="Browse..." Click="BrowseButton_Click"/>
+            </Grid>
+
+            <CheckBox Content="Create desktop shortcut" Margin="0,10,0,0"/>
+            <TextBlock Text="Additional software will be installed:&#x0A;- python3&#x0A;- llama&#x0A;- Qwen3" 
+           Foreground="{StaticResource SystemBaseMediumColor}"/>
+
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,20,0,0">
+            <Button Content="Install" Style="{StaticResource AccentButtonStyle}" Click="InstallButton_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

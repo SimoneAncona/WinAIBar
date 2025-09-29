@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Input;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Windows.Graphics;
@@ -30,6 +31,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private int _ticksPassed = 0;
 
     private readonly SLMClient _client;
+    private readonly ExecuteActions _actions;
     private readonly Options _options;
     private static bool s_hidden = false;
     private static bool s_is_loading = false;
@@ -86,6 +88,9 @@ public sealed partial class MainWindow : Window, IDisposable
             modelPath: _options.Model
         );
         _client.StartOllama();
+
+        _actions = new(this);
+
         if (_options.SelfMode)
             Placeholder = "(Self mode) Start typing...";
         SearchBox.PlaceholderText = Placeholder;
@@ -189,7 +194,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private async void SearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         var text = SearchBox.Text;
-        if (e.Key == VirtualKey.Enter)
+        if (e.Key == VirtualKey.Enter && !string.IsNullOrEmpty(text))
         {
             Interrupt = true;
             Resize(new(Width, Height));
@@ -217,7 +222,8 @@ public sealed partial class MainWindow : Window, IDisposable
                 Debug.WriteLine(res);
                 var actions = JsonConvert.DeserializeObject<List<ActionResult>>(res) ?? throw new Exception($"Cannot convert {res}");
                 Interrupt = false;
-                await ExecuteActions.ExecuteAsync(text, actions, this);
+                ClearItems();
+                await _actions.ExecuteAsync(text, actions);
             }
             catch (Exception ex)
             {
@@ -229,7 +235,15 @@ public sealed partial class MainWindow : Window, IDisposable
             s_is_loading = false;
             return;
         }
-        await ExecuteActions.ExecuteAsync(string.Empty, [new() { Action = "getDir", Argument = text }], this);
+        try
+        {
+            new DataTable().Compute(text, null);
+            await _actions.ExecuteAsync(string.Empty, [new() { Action = "math", Argument = text }]);
+        }
+        catch
+        {
+            await _actions.ExecuteAsync(string.Empty, [new() { Action = "getDir", Argument = text }]);
+        }
     }
 
     private void SearchBox_Loaded(object sender, RoutedEventArgs e)

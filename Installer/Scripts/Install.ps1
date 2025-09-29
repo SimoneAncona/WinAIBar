@@ -7,3 +7,6 @@ try {
 }
 pip install -U "huggingface_hub[cli]"
 hf download Qwen/Qwen3-1.7B-GGUF
+
+mkdir $0
+Move-Item .\App .\$0 
