@@ -27,7 +27,8 @@ namespace AIBar.Windows;
 public sealed partial class MainWindow : Window, IDisposable
 {
     public static bool Interrupt { get; set; }
-    private DispatcherTimer _timer = new();
+    public TextBox Search => SearchBox;
+    private readonly DispatcherTimer _timer = new();
     private int _ticksPassed = 0;
 
     private readonly SLMClient _client;
@@ -44,7 +45,7 @@ public sealed partial class MainWindow : Window, IDisposable
 
     private const int Width = 1200;
     private const int Height = 130;
-    private string Placeholder = "Ask me everything...";
+    private readonly string Placeholder = "Ask me everything...";
 
     private readonly LowLevelKeyboardProc _proc;
     private static IntPtr _hookID = IntPtr.Zero;
@@ -194,7 +195,8 @@ public sealed partial class MainWindow : Window, IDisposable
     private async void SearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         var text = SearchBox.Text;
-        if (e.Key == VirtualKey.Enter && !string.IsNullOrEmpty(text))
+        if (string.IsNullOrEmpty(text)) return;
+        if (e.Key == VirtualKey.Enter)
         {
             Interrupt = true;
             Resize(new(Width, Height));

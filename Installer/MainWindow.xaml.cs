@@ -82,7 +82,8 @@ public sealed partial class MainWindow : Window
             CreateNoWindow = true,
             Verb = "runas",
             RedirectStandardOutput = true,
-            RedirectStandardError = true
+            RedirectStandardError = true,
+            WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
         });
         if (process is null)
         {

@@ -151,15 +151,28 @@ public class ExecuteActions(MainWindow window)
         try
         {
             var result = new DataTable().Compute(expression, null);
-            window.Resize(new(1200, 300));
+            window.Resize(new(1200, 260));
             window.ClearItems();
-            var responseEl = new TextBlock()
+            var responseEl = new Button()
             {
-                Text = result.ToString(),
-                FontSize = 30,
-                TextAlignment = TextAlignment.Left,
-                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
-                Margin = new(20)
+                Content = new TextBlock()
+                {
+                    Text = result.ToString(),
+                    FontSize = 25,
+                    TextAlignment = TextAlignment.Left,
+                    FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                },
+                Margin = new(20),
+                Background = null,
+                BorderThickness = new Thickness(0)
+            };
+            responseEl.Click += (_, _) =>
+            {
+                try
+                {
+                    window.Search.Text = result.ToString();
+                }
+                catch { }
             };
             window.AddItem(responseEl);
         }
@@ -381,28 +394,16 @@ public class ExecuteActions(MainWindow window)
                 {
                     foreach (var el in toShow)
                     {
-                        var stackPanel = new StackPanel
-                        {
-                            Orientation = Orientation.Horizontal,
-                            Spacing = 10,
-                        };
-                        stackPanel.Children.Add(new FontIcon
-                        {
-                            Glyph = el.Type == "dir" ? "\uE8B7" : "\uE7C3",
-                            FontSize = 20,
-                            VerticalAlignment = VerticalAlignment.Center,
-                        });
-                        stackPanel.Children.Add(new TextBlock
-                        {
-                            Text = el.Path,
-                            FontSize = 15,
-                            TextAlignment = TextAlignment.Left,
-                            TextTrimming = TextTrimming.CharacterEllipsis,
-                        });
                         var b = new Button
                         {
                             Background = new SolidColorBrush(Colors.Transparent),
-                            Content = stackPanel,
+                            Content = new TextBlock
+                            {
+                                Text = (el.Type == "dir" ? "📁" : "📃") + " " + el.Path,
+                                FontSize = 15,
+                                TextAlignment = TextAlignment.Left,
+                                TextTrimming = TextTrimming.CharacterEllipsis,
+                            },
                             BorderThickness = new Thickness(0)
                         };
                         b.Click += (_, _) => StartProcess("explorer.exe /select, \"" + el.Path + "\"");
@@ -418,6 +419,7 @@ public class ExecuteActions(MainWindow window)
     {
         if (!Directory.Exists(path))
         {
+            window.ClearItems();
             window.Resize();
             return;
         }
@@ -425,10 +427,9 @@ public class ExecuteActions(MainWindow window)
         window.ClearItems();
         var listView = new ListView
         {
-            Margin = new(15),
+            Margin = new(10),
             Height = 350,
             MaxHeight = 350,
-
         };
 
         listView.Loaded += (listView, _) =>
@@ -466,7 +467,7 @@ public class ExecuteActions(MainWindow window)
 
         var listView = new ListView
         {
-            Margin = new(15),
+            Margin = new(10),
             Height = 350,
             MaxHeight = 350,
         };
