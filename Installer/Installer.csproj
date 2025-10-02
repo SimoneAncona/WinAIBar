@@ -27,6 +27,10 @@
 		</Content>
 		<Content Include="Installer.ico" />
   </ItemGroup>
+	
+	<Target Name="CreateDebugAppFolder" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug'">
+		<MakeDir Directories="App\" Condition="!Exists('App\')"/>
+	</Target>
 
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />

@@ -8,18 +8,20 @@ try {
 pip install -U "huggingface_hub[cli]"
 hf download Qwen/Qwen3-1.7B-GGUF
 
+$dir = $args[0]
+
 try {
-    mkdir "$args[0]"
+    mkdir "$dir"
 } catch {
-    Write-Host "Folder $args[0] already exists"
+    Write-Host "Folder $dir already exists"
 }
-Copy-Item .\App\** "$args[0]" -Recurse
+Copy-Item .\App\** "$dir" -Recurse > $null
 
 $UninstallBat = "
 @echo off
-set `"FOLDER=$args[0]`"
+set `"FOLDER=$dir`"
 rmdir /s /q `"%FOLDER%`"
 echo Folder deleted successfully.
 "
 
-$UninstallContent | Out-File "$args[0]\uninstall.bat" -Encoding UTF8
+$UninstallContent | Out-File "$dir\uninstall.bat" -Encoding UTF8

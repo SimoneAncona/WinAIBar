@@ -9,9 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Principal;
 using System.Text.RegularExpressions;
-using Windows.Storage;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
+using Microsoft.Windows.Storage.Pickers;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -47,18 +45,14 @@ public sealed partial class MainWindow : Window
 
     private async void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
-        FolderPicker folderPicker = new()
+        FolderPicker folderPicker = new(AppWindow.Id)
         {
             SuggestedStartLocation = PickerLocationId.ComputerFolder
         };
-        folderPicker.FileTypeFilter.Add("*");
 
-        IntPtr hwnd = WindowNative.GetWindowHandle(this);
-        InitializeWithWindow.Initialize(folderPicker, hwnd);
+        var folder = await folderPicker.PickSingleFolderAsync();
 
-        StorageFolder folder = await folderPicker.PickSingleFolderAsync();
-
-        if (folder != null)
+        if (folder is not null)
         {
             InstallPathTextBox.Text = folder.Path;
             CheckEmptyFolder();
@@ -122,7 +116,7 @@ public sealed partial class MainWindow : Window
             var process = Process.Start(new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"" + AppDomain.CurrentDomain.BaseDirectory + "Scripts\\Install.ps1\" \"" + InstallPathTextBox.Text + "\"",
+                Arguments = "-noprofile -executionpolicy bypass -file \"" + AppDomain.CurrentDomain.BaseDirectory + "Scripts\\Install.ps1\" \"" + InstallPathTextBox.Text + "\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 Verb = "runas",
@@ -162,12 +156,21 @@ public sealed partial class MainWindow : Window
             {
                 DispatcherQueue.TryEnqueue(() =>
                 {
-                    logTextBox.Text += "\u2714 Installation completed. You can close this window" + Environment.NewLine;
-                    RegisterApp(InstallPathTextBox.Text);
-                    Process.Start(new ProcessStartInfo
+                    try
                     {
-                        FileName = Path.Combine(InstallPathTextBox.Text, "AIBar.exe"),
-                    });
+                        RegisterApp(InstallPathTextBox.Text);
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = Path.Combine(InstallPathTextBox.Text, "AIBar.exe"),
+                        });
+                        logTextBox.Text += "\u2714 Installation completed. You can close this window" + Environment.NewLine;
+                    }
+                    catch (Exception ex)
+                    {
+                        logTextBox.Text += $"\u26A0 Installation partially completed or failed: {ex}" + Environment.NewLine;
+                        if (ex.InnerException is not null)
+                            logTextBox.Text += $"\t{ex.InnerException.Message}";
+                    }
                 });
             };
             process.Start();
@@ -190,7 +193,7 @@ public sealed partial class MainWindow : Window
         string publisher = "Simone Ancona";
         string uninstallString = Path.Combine(path, "uninstall.bat");
 
-        var key = Registry.CurrentUser.OpenSubKey(
+        var key = Registry.LocalMachine.OpenSubKey(
             @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + appName
         );
         key ??= Registry.LocalMachine.CreateSubKey(
