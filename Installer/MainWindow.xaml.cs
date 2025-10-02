@@ -77,13 +77,13 @@ public sealed partial class MainWindow : Window
         var process = Process.Start(new ProcessStartInfo
         {
             FileName = "pwsh.exe",
-            Arguments = "-NoProfile -Command " + AppDomain.CurrentDomain.BaseDirectory + "Scripts\\Install.ps1 \"" + InstallPathTextBox.Text + "\"",
+            Arguments = "-NoProfile -Command \"" + AppDomain.CurrentDomain.BaseDirectory + "Scripts\\Install.ps1\" \"" + InstallPathTextBox.Text + "\"",
             UseShellExecute = false,
             CreateNoWindow = true,
             Verb = "runas",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
+            WorkingDirectory = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule!.FileName)
         });
         if (process is null)
         {

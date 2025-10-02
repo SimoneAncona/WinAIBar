@@ -8,5 +8,9 @@ try {
 pip install -U "huggingface_hub[cli]"
 hf download Qwen/Qwen3-1.7B-GGUF
 
-mkdir $0
-Move-Item .\App .\$0 
+try {
+    mkdir $args[0]
+} catch {
+    Write-Host "Folder $args[0] already exists"
+}
+Copy-Item .\App\** $args[0]
